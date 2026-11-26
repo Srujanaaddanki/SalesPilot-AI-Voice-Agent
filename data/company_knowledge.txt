@@ -1,0 +1,55 @@
+# SalesPilot AI & Fortivex AI Private Limited - Company Knowledge Base
+
+## 1. Company Overview
+Fortivex AI Private Limited builds enterprise-ready AI automation solutions and autonomous AI voice & conversational agents for sales, customer support, and lead operations.
+Our flagship product is SalesPilot AI, an autonomous AI sales voice and chat assistant designed to engage inbound and outbound prospects 24/7, qualify leads, answer product questions accurately from company knowledge, schedule demo requests, and synchronize structured CRM insights.
+
+## 2. Core Products and AI Automation Services
+
+### A. AI Automation Services (Custom Enterprise Workflows)
+- Automated lead intake, qualification, and CRM enrichment across web, WhatsApp, email, and voice channels.
+- Document and workflow automation using Retrieval-Augmented Generation (RAG) for sales playbooks, SOPs, and internal knowledge bases.
+- Custom API and webhook integrations connecting AI agents to CRMs (HubSpot, Zoho CRM, Salesforce), calendars, and ERP tools.
+- Typical deployment timeline: 2 to 4 weeks for standard automation workflows; 4 to 8 weeks for multi-system enterprise deployments.
+
+### B. SalesPilot AI Voice Agent (Autonomous Sales Representative)
+- Real-time conversational voice and text engagement with multilingual support (English and Hindi supported in current release).
+- Automated BANT-style lead qualification: captures Customer Name, Email, Phone, Product/Service Interest, Business Requirement, Budget, and Purchase Timeline.
+- Real-time customer sentiment analysis (Positive, Neutral, Negative) to prioritize high-intent prospects or flag frustrated callers for human follow-up.
+- Automated appointment request capture with date/time validation and CRM logging.
+- Post-call structured call summary generation with recommended next actions.
+
+### C. Knowledge & RAG Systems
+- Grounded question-answering over verified company PDFs, pricing sheets, FAQs, and product manuals.
+- Hallucination guardrails: if an answer is not present in verified company documents, the AI states clearly that the detail is unavailable and offers to connect the prospect with a human specialist.
+
+## 3. Pricing Plans (Indicative Packages)
+- Starter AI Automation Plan: INR 25,000/month (or USD 300/month) — includes up to 2,000 conversation turns, 1 AI sales workflow, knowledge base RAG setup, and SQLite/CSV or single-CRM webhook export.
+- Growth SalesPilot Plan: INR 65,000/month (or USD 800/month) — includes up to 10,000 conversation turns, voice + text support, multilingual English & Hindi, CRM sync (Zoho/HubSpot), sentiment analytics, and priority onboarding.
+- Enterprise Custom Plan: Custom pricing starting around INR 1,50,000/month (or USD 1,800+/month) — dedicated cloud deployment (AWS Mumbai / VPC), custom telephony (Twilio/Exotel SIP), multi-tenant RBAC, SLA guarantees, and custom integrations.
+- One-time implementation & onboarding fee: INR 30,000 to INR 1,00,000 depending on integration complexity (waived on annual Enterprise contracts).
+- Free Pilot / Demo: A 14-day guided proof-of-concept demo is available for qualified businesses.
+
+## 4. Implementation & Onboarding Process
+1. Discovery Call (30 minutes): Understand business requirements, target lead volume, CRM tools, and budget.
+2. Knowledge Ingestion & Agent Design (Week 1): Upload FAQs, pricing, and qualification scripts.
+3. Sandbox Testing & Integration (Week 2): Test RAG accuracy, sentiment tracking, and appointment request capture.
+4. Go-Live & Monitoring (Week 3+): Launch with dashboard analytics, transcript reviews, and weekly optimization.
+
+## 5. Security, Privacy & Compliance
+- API credentials and secrets are stored exclusively in environment variables or cloud secret managers, never in source code.
+- Data encryption in transit (TLS/HTTPS) and encryption at rest in production deployments.
+- Designed with alignment to India's Digital Personal Data Protection (DPDP) Act 2023 principles: explicit AI disclosure, purpose limitation, minimal PII logging, and data deletion on request.
+- Outbound calling workflows must comply with TRAI DND and commercial communication regulations.
+
+## 6. Frequently Asked Questions (FAQ)
+- Q: Do you support Zoho CRM, HubSpot, and Google Calendar?
+  A: Yes, our production integration layer supports Zoho CRM, HubSpot, Salesforce, and calendar APIs via REST webhooks. The local demo prototype uses SQLite for offline reliability.
+- Q: What happens if the AI does not know the answer to a customer's question?
+  A: The AI does not guess or fabricate prices or policies. It informs the customer honestly and records a follow-up request for a human sales specialist.
+- Q: Can SalesPilot AI work in Hindi?
+  A: Yes, English and Hindi are supported for text conversation, speech-to-text, and text-to-speech playback in the current prototype.
+- Q: Do you sell telecom hardware or SIM boxes?
+  A: No, Fortivex AI provides cloud/software AI automation and integrates with licensed cloud telephony providers such as Twilio and Exotel.
+- Q: How do I schedule a demo or consultation?
+  A: Customers can submit an appointment request directly in the chat or booking form by providing their name, email or phone number, preferred date, and preferred time. Note that appointment requests are logged in the CRM for confirmation by our sales team.
