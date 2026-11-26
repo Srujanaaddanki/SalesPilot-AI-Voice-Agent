@@ -1,10 +1,11 @@
 """Optional FastAPI REST backend exposing SalesPilot AI conversation, CRM, and appointment endpoints."""
 
+import os
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.agents.sales_agent import SalesAgent
 from modules.appointment_manager import AppointmentManager
@@ -17,12 +18,15 @@ app = FastAPI(
     version="1.1.0",
 )
 
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:8501,http://127.0.0.1:8501")
+_allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 sales_agent = SalesAgent()
@@ -31,9 +35,9 @@ summarizer = CallSummarizer(sales_agent.engine.db)
 
 
 class ChatRequest(BaseModel):
-    message: str
-    session_id: str = "default"
-    language: str = "English"
+    message: str = Field(..., min_length=1, max_length=2000)
+    session_id: str = Field(default="default", min_length=1, max_length=64)
+    language: str = Field(default="English", max_length=32)
 
 
 class ChatResponse(BaseModel):

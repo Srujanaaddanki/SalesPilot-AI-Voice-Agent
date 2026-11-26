@@ -8,7 +8,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import pytest
 
+import app as st_app
 from backend import main as api_main
 from database.database import DatabaseManager
 from modules.ai_engine import SalesAIEngine
@@ -16,7 +19,7 @@ from modules.appointment_manager import AppointmentManager
 from modules.lead_manager import LeadManager
 from modules.rag_engine import RAGEngine
 from modules.sentiment import analyze_sentiment
-from modules.speech_engine import SpeechEngine
+from modules.speech_engine import MAX_AUDIO_BYTES, SpeechEngine
 from modules.summarizer import CallSummarizer
 
 
@@ -250,3 +253,63 @@ def test_fastapi_routes_isolated(tmp_path: Path) -> None:
         api_main.sales_agent.engine = orig_engine
         api_main.appointment_manager = orig_appt
         api_main.summarizer = orig_sum
+
+
+def test_contextual_memory_and_session_isolation(tmp_path: Path) -> None:
+    db = _make_temp_db(tmp_path)
+    rag = RAGEngine(knowledge_path=Path("data/company_knowledge.txt"))
+    engine = SalesAIEngine(db=db, rag=rag, force_fallback=True)
+
+    # Customer A: Turn 1 (name + initial interest), Turn 2 (budget), Turn 3 (product question)
+    engine.process_turn("cust-a", "Hi, my name is Sneha Iyer and I am interested in AI automation services.", "English")
+    engine.process_turn("cust-a", "Our budget is around 50,000 per month.", "English")
+    turn3 = engine.process_turn("cust-a", "Tell me about the Growth Plan pricing.", "English")
+
+    lead_a = db.get_lead_by_session("cust-a")
+    assert lead_a is not None
+    assert lead_a["name"] == "Sneha Iyer"
+    assert "50,000" in lead_a["budget"]
+    assert "AI Automation Services" in lead_a["product_interest"]
+    assert "Growth Plan" in lead_a["product_interest"]
+    assert "Sneha Iyer" in turn3["reply"]
+
+    # Customer B in separate session must not inherit Customer A's details
+    engine.process_turn("cust-b", "My name is Vikram Das.", "English")
+    lead_b = db.get_lead_by_session("cust-b")
+    assert lead_b is not None
+    assert lead_b["name"] == "Vikram Das"
+    assert lead_b["budget"] == ""
+    assert len(db.get_conversation_history("cust-a")) == 6
+    assert len(db.get_conversation_history("cust-b")) == 2
+
+
+def test_security_input_validation_and_admin_controls(tmp_path: Path, monkeypatch) -> None:
+    db = _make_temp_db(tmp_path)
+    rag = RAGEngine(knowledge_path=Path("data/company_knowledge.txt"))
+    engine = SalesAIEngine(db=db, rag=rag, force_fallback=True)
+
+    # Oversized chat message rejected
+    with pytest.raises(ValueError, match="maximum allowed length"):
+        engine.process_turn("sec-sess", "A" * (engine.MAX_MESSAGE_CHARS + 1), "English")
+
+    # Invalid/non-WAV upload and oversized audio rejected
+    speech = SpeechEngine()
+    txt_bad, err_bad = speech.transcribe_audio_bytes(b"NOT_A_WAV_FILE" * 10, "English")
+    assert txt_bad is None and "Unsupported audio format" in str(err_bad)
+
+    txt_big, err_big = speech.transcribe_audio_bytes(b"RIFF" + b"\x00" * (MAX_AUDIO_BYTES + 10), "English")
+    assert txt_big is None and "10 MB" in str(err_big)
+
+    # Admin passcode helper & CSV formula neutralization (preserving +91 phone numbers)
+    monkeypatch.setenv("ADMIN_PASSCODE", "fortivex-admin-2026")
+    expected = st_app.get_configured_admin_passcode()
+    assert expected == "fortivex-admin-2026"
+    assert st_app.verify_admin_passcode("fortivex-admin-2026", expected) is True
+    assert st_app.verify_admin_passcode("wrong-pass", expected) is False
+
+    df = pd.DataFrame([{"name": "=CMD()", "phone": "+91 9876543210", "email": "@bad"}])
+    clean_df = st_app.sanitize_csv_dataframe(df)
+    assert clean_df.iloc[0]["name"] == "'=CMD()"
+    assert clean_df.iloc[0]["email"] == "'@bad"
+    assert clean_df.iloc[0]["phone"] == "+91 9876543210"
+

@@ -127,6 +127,8 @@ GROQ_MODEL=llama-3.3-70b-versatile
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-2.0-flash
 SALESPILOT_DB_PATH=database/salespilot.db
+ADMIN_PASSCODE=change_me_for_public_deploy
+ALLOWED_ORIGINS=http://localhost:8501,http://127.0.0.1:8501
 ```
 
 ---
@@ -148,6 +150,35 @@ uvicorn backend.main:app --reload
 ```bash
 pytest -v
 ```
+
+---
+
+## Public Deployment Instructions
+
+### Option A: Streamlit Community Cloud (Simplest Free Hosting)
+1. Push this repository to GitHub (`.env` and `*.db` remain excluded via `.gitignore`).
+2. Visit [share.streamlit.io](https://share.streamlit.io/) and click **New app**.
+3. Select repository `Srujanaaddanki/SalesPilot-AI-Voice-Agent`, branch `main`, and main file path `app.py` (select **Python 3.11** in Advanced Settings).
+4. In **App Settings → Secrets**, add:
+   ```toml
+   LLM_PROVIDER = "auto"
+   GROQ_API_KEY = "your_groq_api_key"
+   GROQ_MODEL = "llama-3.3-70b-versatile"
+   ADMIN_PASSCODE = "your_strong_passcode"
+   ```
+5. Click **Deploy**. Streamlit Cloud serves over HTTPS (required for browser microphone permissions) and reads `packages.txt` + `.streamlit/config.toml` automatically.
+
+### Option B: Docker / Render (Recommended When Persistent Disk Is Needed)
+1. Build and run locally with Docker:
+   ```bash
+   docker build -t salespilot-ai .
+   docker run -p 8501:8501 --env-file .env -v salespilot_data:/app/database salespilot-ai
+   ```
+2. Or deploy on Render as a **Docker Web Service** using the included `Dockerfile`, adding `.env` variables in the Render Environment tab and mounting a Persistent Disk at `/app/database` so `salespilot.db` survives restarts.
+
+### Hosting Limitations to Note
+- **Ephemeral SQLite on free stateless tiers:** On Streamlit Community Cloud, local disk storage resets on app sleep or redeployment; use a mounted Docker volume / Render Persistent Disk or migrate to PostgreSQL for durable production storage.
+- **Browser microphone access:** Modern browsers require `https://` (provided automatically on Streamlit Cloud/Render) or `http://localhost` for `st.audio_input`.
 
 ---
 

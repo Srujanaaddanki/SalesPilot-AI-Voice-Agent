@@ -57,22 +57,25 @@ class LeadManager:
             if 10 <= len(digits) <= 15:
                 extracted["phone"] = phone_match.group(0).strip()
 
-        # Name patterns (careful not to match "I am interested...")
+        # Name patterns (careful not to match "I am interested..." or trailing conjunctions like "and")
         name_patterns = [
-            r"(?:my name is|i am|i'm|this is|call me|name[:\s]+)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})",
-            r"(?:my name is|name[:\s]+)\s*([a-z]{2,20}(?:\s+[a-z]{2,20}){0,1})",
-            r"mera naam\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+hai",
+            (r"(?:my name is|i am|i'm|this is|call me|name[:\s]+)\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})", 0),
+            (r"(?:my name is|name[:\s]+)\s*([a-z]{2,20}(?:\s+[a-z]{2,20}){0,1})", re.IGNORECASE),
+            (r"mera naam\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+hai", re.IGNORECASE),
         ]
         stop_names = {
             "interested", "looking", "calling", "trying", "asking", "here", "ready",
             "from", "good", "fine", "happy", "concerned", "building", "running",
         }
-        for pat in name_patterns:
-            m = re.search(pat, clean, flags=re.IGNORECASE if "mera naam" in pat or "name[:\\s]" in pat else 0)
+        trailing_stop_words = {"and", "or", "from", "at", "with", "for", "email", "phone", "my"}
+        for pat, pat_flags in name_patterns:
+            m = re.search(pat, clean, flags=pat_flags)
             if m:
-                candidate = m.group(1).strip(" .,!?")
-                first_word = candidate.split()[0].lower()
-                if first_word not in stop_names and len(candidate) >= 2:
+                words = m.group(1).strip(" .,!?").split()
+                while words and words[-1].lower() in trailing_stop_words:
+                    words.pop()
+                candidate = " ".join(words)
+                if words and words[0].lower() not in stop_names and len(candidate) >= 2:
                     extracted["name"] = candidate.title()
                     break
 
@@ -81,6 +84,7 @@ class LeadManager:
             r"(?:budget(?:\s+is|\s+around|\s+of)?\s*(?:is|around|about)?\s*)((?:rs\.?|inr|₹|usd|\$)?\s*\d[\d,]*(?:\.\d+)?\s*(?:k|lakh|lakhs|crore|m|million|thousand)?(?:\s*(?:/|per)?\s*(?:month|mo|year|yr|annum))?)",
             r"((?:rs\.?|inr|₹|\$|usd)\s*\d[\d,]*(?:\.\d+)?\s*(?:k|lakh|lakhs|crore|m)?(?:\s*(?:/|per)?\s*(?:month|mo|year|yr|annum))?)",
             r"(\d[\d,]*(?:\.\d+)?\s*(?:k|lakh|lakhs)\s*(?:per\s+month|monthly|per\s+year|annually|/month|/mo)?)",
+            r"(\d[\d,]*(?:\.\d+)?\s*(?:per\s+month|monthly|per\s+year|annually|/month|/mo))",
         ]
         for pat in budget_patterns:
             m = re.search(pat, clean, flags=re.IGNORECASE)
@@ -198,6 +202,11 @@ class LeadManager:
                 prev = str(existing["business_requirement"])
                 if v not in prev and len(prev) < 350:
                     merged[k] = f"{prev}; {v}"[:400]
+            elif k == "product_interest" and existing.get("product_interest"):
+                prev_items = [x.strip() for x in str(existing["product_interest"]).split(",") if x.strip()]
+                new_items = [x.strip() for x in str(v).split(",") if x.strip()]
+                combined = list(dict.fromkeys(prev_items + new_items))
+                merged[k] = ", ".join(combined)[:300]
             else:
                 merged[k] = v
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import os
 import uuid
 from datetime import date, time, timedelta
 from typing import Any, Dict
@@ -18,6 +20,41 @@ from modules.lead_manager import FIELD_LABELS, LeadManager
 from modules.rag_engine import RAGEngine
 from modules.speech_engine import SpeechEngine
 from modules.summarizer import CallSummarizer
+
+
+def _sync_streamlit_secrets_to_env() -> None:
+    """Populate environment variables from Streamlit Cloud st.secrets if present."""
+    try:
+        for key in ("GROQ_API_KEY", "GROQ_MODEL", "GEMINI_API_KEY", "GEMINI_MODEL", "LLM_PROVIDER", "ADMIN_PASSCODE"):
+            if not os.getenv(key) and key in st.secrets:
+                os.environ[key] = str(st.secrets[key])
+    except Exception:
+        pass
+
+
+def get_configured_admin_passcode() -> str:
+    """Return configured ADMIN_PASSCODE if set (and non-placeholder), else empty string."""
+    val = os.getenv("ADMIN_PASSCODE", "").strip()
+    if not val or val.startswith("your_") or val == "change_me_for_public_deploy":
+        return ""
+    return val
+
+
+def verify_admin_passcode(submitted: str, expected: str) -> bool:
+    """Constant-time passcode verification for Admin CRM access."""
+    if not expected:
+        return True
+    return hmac.compare_digest((submitted or "").strip(), expected)
+
+
+def sanitize_csv_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Guard CSV cells against spreadsheet formula injection without altering phone numbers."""
+    clean_df = df.copy()
+    for col in clean_df.select_dtypes(include=["object", "string"]).columns:
+        clean_df[col] = clean_df[col].apply(
+            lambda v: f"'{v}" if isinstance(v, str) and v.startswith(("=", "@", "\t", "\r")) else v
+        )
+    return clean_df
 
 
 st.set_page_config(
@@ -57,8 +94,11 @@ def get_ai_engine(services: Dict[str, Any], force_fallback: bool) -> SalesAIEngi
 
 
 def init_session_state() -> None:
+    _sync_streamlit_secrets_to_env()
     if "session_id" not in st.session_state:
         st.session_state.session_id = f"sess-{uuid.uuid4().hex[:8]}"
+    if "admin_authenticated" not in st.session_state:
+        st.session_state.admin_authenticated = False
     if "last_audio_hash" not in st.session_state:
         st.session_state.last_audio_hash = None
     if "last_tts_audio" not in st.session_state:
@@ -82,12 +122,16 @@ def handle_user_turn(
     user_text: str,
     language: str,
     enable_tts: bool,
-) -> None:
-    result = ai_engine.process_turn(
-        session_id=session_id,
-        user_message=user_text,
-        language=language,
-    )
+) -> bool:
+    try:
+        result = ai_engine.process_turn(
+            session_id=session_id,
+            user_message=user_text,
+            language=language,
+        )
+    except ValueError as exc:
+        st.error(str(exc))
+        return False
     st.session_state.last_rag_hits = result.get("rag_hits", [])
     st.session_state.last_sentiment = result.get("sentiment", {"label": "Neutral", "score": 0.0})
     st.session_state.last_provider_info = (
@@ -102,6 +146,7 @@ def handle_user_turn(
     else:
         st.session_state.last_tts_audio = None
         st.session_state.last_tts_error = None
+    return True
 
 
 def render_sentiment_badge(label: str, score: float) -> None:
@@ -239,8 +284,8 @@ def render_agent_page(services: Dict[str, Any], language: str, enable_tts: bool,
             "Type your message (e.g., 'I am interested in your AI automation services.')..."
         )
         if user_prompt:
-            handle_user_turn(ai_engine, speech, session_id, user_prompt, language, enable_tts)
-            st.rerun()
+            if handle_user_turn(ai_engine, speech, session_id, user_prompt, language, enable_tts):
+                st.rerun()
 
     with col_intel:
         st.subheader("2. Live Lead, Sentiment & Booking")
@@ -333,6 +378,26 @@ def render_admin_dashboard(services: Dict[str, Any]) -> None:
     st.title("📊 SalesPilot AI – Admin CRM & Insights Dashboard")
     st.caption("Live data backed by local SQLite CRM database")
 
+    expected_passcode = get_configured_admin_passcode()
+    if expected_passcode and not st.session_state.admin_authenticated:
+        st.warning("Admin CRM access is protected. Enter your configured `ADMIN_PASSCODE` to continue.")
+        with st.form("admin_auth_form"):
+            entered = st.text_input("Admin Passcode", type="password")
+            unlock = st.form_submit_button("Unlock Admin CRM")
+        if unlock:
+            if verify_admin_passcode(entered, expected_passcode):
+                st.session_state.admin_authenticated = True
+                st.rerun()
+            else:
+                st.error("Invalid passcode.")
+        return
+
+    if not expected_passcode:
+        st.info(
+            "🔓 **Local Demo Access**: `ADMIN_PASSCODE` is not configured. "
+            "Set `ADMIN_PASSCODE` in `.env` or Streamlit Secrets before deploying publicly."
+        )
+
     metrics = db.get_dashboard_metrics()
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Total Leads", metrics["total_leads"])
@@ -387,9 +452,10 @@ def render_admin_dashboard(services: Dict[str, Any]) -> None:
         if leads:
             df_leads = pd.DataFrame(leads)
             st.dataframe(df_leads, use_container_width=True)
+            safe_csv_df = sanitize_csv_dataframe(df_leads)
             st.download_button(
                 "Export Leads CSV",
-                data=df_leads.to_csv(index=False).encode("utf-8"),
+                data=safe_csv_df.to_csv(index=False).encode("utf-8"),
                 file_name="salespilot_leads.csv",
                 mime="text/csv",
             )

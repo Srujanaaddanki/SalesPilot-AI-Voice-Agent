@@ -220,6 +220,8 @@ class SalesAIEngine:
             )
 
         parts: List[str] = []
+        cust_name = str(lead.get("name") or "").strip()
+        greeting_prefix = f"{cust_name}, " if cust_name else ""
 
         # 1. Grounded RAG knowledge response
         if rag_hits:
@@ -233,28 +235,41 @@ class SalesAIEngine:
             concise_info = " ".join(snippet_lines[:3])[:380]
             if is_hindi:
                 parts.append(
-                    f"हमारी कंपनी जानकारी ({top_hit['section']}) के अनुसार: {concise_info}"
+                    f"{greeting_prefix}हमारी कंपनी जानकारी ({top_hit['section']}) के अनुसार: {concise_info}"
                 )
             else:
                 parts.append(
-                    f"Based on our verified company knowledge ({top_hit['section']}): {concise_info}"
+                    f"{greeting_prefix}based on our verified company knowledge ({top_hit['section']}): {concise_info}"
+                    if cust_name
+                    else f"Based on our verified company knowledge ({top_hit['section']}): {concise_info}"
                 )
         elif self._looks_like_unknown_factual_question(user_message):
             if is_hindi:
                 parts.append(
-                    "ईमानदारी से कहूँ तो मेरे पास इस विशिष्ट विषय पर सत्यापित कंपनी जानकारी उपलब्ध नहीं है, "
+                    f"{greeting_prefix}ईमानदारी से कहूँ तो मेरे पास इस विशिष्ट विषय पर सत्यापित कंपनी जानकारी उपलब्ध नहीं है, "
                     "इसलिए मैं कोई गलत जानकारी नहीं दूँगा। मैं इसे हमारी सेल्स टीम के फॉलो-अप के लिए नोट कर सकता हूँ।"
                 )
             else:
                 parts.append(
-                    "To be completely transparent, I do not have verified information on that specific detail "
+                    f"{greeting_prefix}to be completely transparent, I do not have verified information on that specific detail "
+                    "in our company knowledge base, so I will not guess. I can note this for our sales specialist to confirm."
+                    if cust_name
+                    else "To be completely transparent, I do not have verified information on that specific detail "
                     "in our company knowledge base, so I will not guess. I can note this for our sales specialist to confirm."
                 )
         else:
+            known_context = []
+            if lead.get("budget"):
+                known_context.append(f"budget ({lead['budget']})")
+            if lead.get("purchase_timeline"):
+                known_context.append(f"timeline ({lead['purchase_timeline']})")
+            if lead.get("product_interest"):
+                known_context.append(f"interest ({lead['product_interest']})")
+            ctx_note = f" (noted: {', '.join(known_context)})" if known_context else ""
             if is_hindi:
-                parts.append("धन्यवाद, मैंने आपकी जानकारी रिकॉर्ड कर ली है।")
+                parts.append(f"धन्यवाद {cust_name + ' जी, ' if cust_name else ''}मैंने आपकी जानकारी रिकॉर्ड कर ली है।")
             else:
-                parts.append("Thank you for sharing those details — I have updated your inquiry profile.")
+                parts.append(f"Thank you{', ' + cust_name if cust_name else ''}! I have updated your inquiry profile{ctx_note}.")
 
         # 2. Targeted qualification follow-up questions
         if missing_fields:
@@ -331,6 +346,8 @@ class SalesAIEngine:
             notes="Captured inline from conversation",
         )
 
+    MAX_MESSAGE_CHARS = 2000
+
     def process_turn(
         self,
         session_id: str,
@@ -341,6 +358,8 @@ class SalesAIEngine:
         clean_msg = (user_message or "").strip()
         if not clean_msg:
             raise ValueError("Customer message cannot be empty.")
+        if len(clean_msg) > self.MAX_MESSAGE_CHARS:
+            raise ValueError(f"Message exceeds maximum allowed length of {self.MAX_MESSAGE_CHARS} characters.")
 
         # 1. Sentiment analysis
         sentiment_res = analyze_sentiment(clean_msg)

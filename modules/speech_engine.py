@@ -19,6 +19,7 @@ SUPPORTED_LANGUAGES: Dict[str, Dict[str, str]] = {
     "English": {"stt_code": "en-IN", "tts_code": "en"},
     "Hindi": {"stt_code": "hi-IN", "tts_code": "hi"},
 }
+MAX_AUDIO_BYTES = 10 * 1024 * 1024  # 10 MB safety cap
 
 
 class SpeechEngine:
@@ -35,8 +36,12 @@ class SpeechEngine:
         self, audio_bytes: bytes, language: str = "English"
     ) -> Tuple[Optional[str], Optional[str]]:
         """Transcribe WAV audio bytes using SpeechRecognition; returns (transcript, error)."""
-        if not audio_bytes:
-            return None, "No audio data received."
+        if not audio_bytes or len(audio_bytes) < 44:
+            return None, "No valid audio data received (recording is empty or too short)."
+        if len(audio_bytes) > MAX_AUDIO_BYTES:
+            return None, "Audio file exceeds the 10 MB upload limit."
+        if audio_bytes[:4] != b"RIFF" or audio_bytes[8:12] != b"WAVE":
+            return None, "Unsupported audio format: please provide a valid PCM WAV recording."
 
         lang_cfg = SUPPORTED_LANGUAGES.get(language, SUPPORTED_LANGUAGES["English"])
         stt_lang = lang_cfg["stt_code"]

@@ -25,16 +25,21 @@
 - **Pricing Model Options:** SaaS monthly tiers (Starter / Growth / Enterprise with included conversation minutes) or usage-based per-minute billing.
 
 ## 4. Data Security & Infrastructure
-- **Implemented Controls:** Secrets loaded exclusively from `.env` (excluded via `.gitignore`), strict server-side input & date validation, RAG anti-hallucination guardrails, and zero PII console logging.
+- **Implemented Controls:** Secrets loaded exclusively from `.env` or Streamlit Secrets (excluded via `.gitignore`), optional constant-time `ADMIN_PASSCODE` protection on the Admin CRM Dashboard, strict chat length & WAV RIFF/size (10 MB) upload validation, CSV formula-injection neutralization, parameterized SQL queries, configurable CORS (`ALLOWED_ORIGINS`), RAG anti-hallucination guardrails, and zero PII console logging.
+- **Deployment Readiness:** Configured for Streamlit Community Cloud (`.streamlit/config.toml`, `packages.txt`) and containerized Docker/Render deployments (`Dockerfile`, `.dockerignore`). Note: SQLite on ephemeral cloud hosts resets on restart; production persistence requires a mounted volume or PostgreSQL.
 - **Production Infrastructure & Compliance Roadmap:** TLS 1.3 in transit, AES-256 at rest (AWS KMS), JWT/RBAC multi-tenant isolation (`tenant_id` on all rows/vectors), PII redaction, retention policies, explicit AI & recording disclosure, and alignment with India's **DPDP Act 2023** and **TRAI** commercial communication regulations.
 
 ## 5. Proposed Scalable Architecture for 100,000 Users
 > **MVP vs. Production Distinction:** The current Streamlit + SQLite prototype is a **single-node local MVP** and does **not** support 100,000 concurrent users.
 
 Using Little's Law (`Concurrent Calls = Arrival Rate × Avg Duration`), 100,000 registered users (assuming 20% daily active callers, 3-minute average call duration, and 15% peak-hour load = 3,000 peak-hour calls) yields **~150 peak concurrent calls**, provisioned with 3× headroom (~500 concurrent calls):
-- **Stateless Edge & Voice Workers:** Decouple UI (React/Next.js) and deploy containerized FastAPI + WebSocket voice gateways (AWS ECS/EKS in Mumbai `ap-south-1`) behind an HTTPS/WSS load balancer with horizontal autoscaling and Twilio/Exotel Media Streams.
-- **Memory, Data & Async Queue:** Replace local state/SQLite with **Redis** (session memory & FAQ cache), **PostgreSQL + PgBouncer + pgvector** (multi-tenant CRM & vector search), and **Celery / AWS SQS** workers for post-call summaries and HubSpot/Zoho/Calendar sync.
-- **Reliability & Monitoring:** Multi-provider LLM/STT/TTS fallbacks with timeouts, rate limiting, and Prometheus/Grafana or CloudWatch observability.
+- **Migration Path from Current MVP:**
+  1. Keep `modules/` domain logic behind stateless FastAPI + WebSocket containers (`backend/main.py`) on AWS ECS/EKS behind an HTTPS/WSS load balancer.
+  2. Move per-session conversation history from SQLite turn-reads into **Redis** (with TTL and FAQ caching).
+  3. Migrate `database/database.py` from SQLite to managed **PostgreSQL + PgBouncer + read replicas**, and migrate `modules/rag_engine.py` from local FAISS/TF-IDF to **pgvector** with `tenant_id` filtering.
+  4. Replace turn-based WAV uploads with **Twilio / Exotel Media Streams** (8 kHz streaming STT/TTS + barge-in) and store recordings in encrypted **S3** object storage.
+  5. Offload call summaries and HubSpot/Zoho/Calendar webhooks to **Celery / AWS SQS** workers, monitored with **Prometheus + Grafana / CloudWatch**.
+- **Estimated Production Cost Categories (Assumptions, Not Quotes):** Assuming 60,000 call-minutes/day (1.8M min/month): STT (~USD 0.005–0.02/min), LLM tokens (~USD 0.002–0.03/min), TTS (~USD 0.01–0.08/min), Telephony (~USD 0.005–0.03/min), and Cloud Infra (~USD 0.002–0.01/min), totaling an illustrative ~USD 0.03–0.15/min depending on vendor tiers and caching.
 
 ## 6. Current Limitations & Future Scope
 - **Limitations:** Local SQLite single-writer scope; turn-based voice recording (`SpeechRecognition` & `gTTS` require internet); appointment requests are not synced to an external Google Calendar.
